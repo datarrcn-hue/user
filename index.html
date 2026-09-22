@@ -52,6 +52,7 @@ button:disabled{background:#DFE6E9!important;cursor:not-allowed;opacity:.6;box-s
 .dana-user-phone{font-size:14px;font-weight:700}
 .dana-header-icons{display:flex;gap:8px}
 .dana-header-icons button{width:38px;height:38px;border-radius:50%;background:rgba(255,255,255,.15);border:none;color:#fff;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;position:relative}
+.dana-header-icons button.muted{opacity:.45}
 .dana-balance-card{background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.25);border-radius:20px;padding:20px;position:relative;z-index:2;margin-bottom:16px}
 .dana-balance-label{font-size:12px;opacity:.85;margin-bottom:6px;display:flex;align-items:center;justify-content:space-between}
 .dana-balance-value{font-size:32px;font-weight:800;letter-spacing:-.5px;margin-bottom:4px}
@@ -231,6 +232,14 @@ button:disabled{background:#DFE6E9!important;cursor:not-allowed;opacity:.6;box-s
 .broadcast-priority-dot.medium{background:#FFB800}
 .broadcast-priority-dot.low{background:#118EEA}
 .broadcast-unread-dot{position:absolute;top:12px;right:12px;width:10px;height:10px;background:var(--danger);border-radius:50%;animation:pulseBadge 1.5s infinite}
+/* Toast notifikasi order */
+.order-notif-toast{position:fixed;top:80px;left:50%;transform:translateX(-50%) translateY(-20px);background:linear-gradient(135deg,#2ED573,#27AE60);color:#fff;padding:16px 24px;border-radius:16px;box-shadow:0 10px 30px rgba(46,213,115,.5);font-weight:700;z-index:10030;opacity:0;transition:all .4s ease;max-width:90%;text-align:center;pointer-events:none}
+.order-notif-toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.order-notif-toast.blue{background:linear-gradient(135deg,#118EEA,#1B9CFC);box-shadow:0 10px 30px rgba(17,142,234,.5)}
+.order-notif-toast.gold{background:linear-gradient(135deg,#FFB800,#FFA502);box-shadow:0 10px 30px rgba(255,184,0,.5)}
+.order-notif-toast i{font-size:22px;margin-right:8px;animation:shake .5s ease}
+.order-notif-toast .toast-title{font-size:14px;margin-bottom:4px;display:flex;align-items:center;justify-content:center;gap:6px}
+.order-notif-toast .toast-sub{font-size:11px;font-weight:500;opacity:.95}
 </style>
 </head>
 <body>
@@ -238,6 +247,10 @@ button:disabled{background:#DFE6E9!important;cursor:not-allowed;opacity:.6;box-s
 <div id="product-toast" class="product-update-toast hidden"></div>
 <div id="botol-notif" class="botol-notif"><i class="fas fa-recycle"></i><span id="botol-notif-text">+1 Botol!</span></div>
 <div id="offline-indicator" class="offline-indicator"><i class="fas fa-wifi"></i> Offline - data tersimpan</div>
+<div id="order-notif-toast" class="order-notif-toast">
+  <div class="toast-title"><i class="fas fa-bell"></i><span id="order-toast-title">Notifikasi</span></div>
+  <div class="toast-sub" id="order-toast-sub"></div>
+</div>
 
 <!-- LOGIN -->
 <div id="login-page" class="card" style="padding:0;overflow:hidden">
@@ -263,6 +276,7 @@ button:disabled{background:#DFE6E9!important;cursor:not-allowed;opacity:.6;box-s
 <div class="dana-user-info"><div class="dana-avatar" id="user-avatar-initial">R</div><div><div class="dana-user-greeting">Selamat datang,</div><div class="dana-user-phone" id="user-display">-</div></div></div>
 <div class="dana-header-icons">
 <button onclick="openBroadcastHistory()" id="broadcast-bell-btn" title="Pesan Admin"><i class="fas fa-bell"></i><span id="broadcast-badge-dashboard" class="broadcast-badge hidden">0</span></button>
+<button onclick="toggleSound()" id="sound-toggle-btn" title="Suara Notifikasi"><i class="fas fa-volume-up" id="sound-icon"></i></button>
 <button onclick="refreshSaldo()"><i class="fas fa-sync-alt"></i></button>
 <button onclick="logout()"><i class="fas fa-sign-out-alt"></i></button>
 </div>
@@ -424,7 +438,7 @@ button:disabled{background:#DFE6E9!important;cursor:not-allowed;opacity:.6;box-s
 </div>
 
 <!-- ============================================================
-     FIREBASE COMPAT SDK (v8) - STABIL UNTUK IFRAME/GOOGLE SITES
+     FIREBASE COMPAT SDK (v8)
      ============================================================ -->
 <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
 <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
@@ -468,6 +482,9 @@ let cart=[],merchants=[],products=[],userOrders=[],newProductsSet=new Set(),last
 let deliveryEnabled=false,manualAddress="",autoLogoutTimer=null;
 let deferredPrompt=null,audioContext=null;
 
+// Sound State
+let soundEnabled = true;
+
 // Broadcast State
 let allBroadcasts=[];
 let readBroadcastIds=[];
@@ -488,9 +505,178 @@ function generateSessionToken(u){return`${u}_${Date.now()}_${Math.random().toStr
 
 function showNotification(msg,type='success'){const nd=document.getElementById('notification');const n=document.createElement('div');n.className='notification';if(type==='error')n.style.borderColor='#ff7675';else if(type==='info')n.style.borderColor='#0984e3';n.innerHTML=msg;nd.innerHTML='';nd.appendChild(n);setTimeout(()=>{n.style.animation='slideUp .3s ease';setTimeout(()=>n.remove(),300)},3000)}
 
-function playBellSound(){try{if(!audioContext)audioContext=new(window.AudioContext||window.webkitAudioContext)();const o=audioContext.createOscillator();const g=audioContext.createGain();o.connect(g);g.connect(audioContext.destination);o.frequency.value=880;g.gain.value=.3;o.start();g.gain.exponentialRampToValueAtTime(.00001,audioContext.currentTime+.8);o.stop(audioContext.currentTime+.8);if(audioContext.state==='suspended')audioContext.resume()}catch(e){}}
+// ============================================================
+// SISTEM SUARA NOTIFIKASI (kring kring)
+// ============================================================
+function initAudio(){
+  try{
+    if(!audioContext)audioContext=new(window.AudioContext||window.webkitAudioContext)();
+    if(audioContext.state==='suspended')audioContext.resume();
+  }catch(e){console.warn('Audio init error:',e);}
+}
 
-function showBotolNotification(b,a){const n=document.getElementById('botol-notif');const t=document.getElementById('botol-notif-text');if(!n||!t)return;if(a>0)t.innerHTML=`<i class="fas fa-plus-circle"></i> +${a} Botol! Total: ${b} 🌟`;else t.innerHTML=`<i class="fas fa-recycle"></i> Total Botol: ${b}`;n.classList.add('show');playBellSound();setTimeout(()=>n.classList.remove('show'),2500);const be=document.getElementById('count');if(be){be.classList.add('increase');setTimeout(()=>be.classList.remove('increase'),500)}}
+/**
+ * Suara "kring kring" untuk notifikasi umum
+ * Pola: 2x ding tinggi (D7 & A7)
+ */
+function playBellSound(){
+  if(!soundEnabled)return;
+  try{
+    initAudio();
+    if(!audioContext)return;
+    const now=audioContext.currentTime;
+    const pattern=[
+      {time:0.00,freq:2349,dur:0.18},
+      {time:0.18,freq:3520,dur:0.22},
+      {time:0.45,freq:2349,dur:0.18},
+      {time:0.63,freq:3520,dur:0.28},
+    ];
+    pattern.forEach(note=>{
+      const osc=audioContext.createOscillator();
+      const gain=audioContext.createGain();
+      osc.type='sine';
+      osc.frequency.setValueAtTime(note.freq,now+note.time);
+      gain.gain.setValueAtTime(0,now+note.time);
+      gain.gain.linearRampToValueAtTime(0.35,now+note.time+0.01);
+      gain.gain.exponentialRampToValueAtTime(0.001,now+note.time+note.dur);
+      osc.connect(gain);
+      gain.connect(audioContext.destination);
+      osc.start(now+note.time);
+      osc.stop(now+note.time+note.dur+0.05);
+    });
+    console.log('🔔 Suara kring diputar');
+  }catch(e){console.warn('Play bell error:',e);}
+}
+
+/**
+ * Suara BOTOL MASUK (meriah)
+ * Melodi: D7 - F#7 - A7 - D8 (arpeggio)
+ */
+function playBottleSound(){
+  if(!soundEnabled)return;
+  try{
+    initAudio();
+    if(!audioContext)return;
+    const now=audioContext.currentTime;
+    const melody=[
+      {time:0.00,freq:2349,dur:0.15},
+      {time:0.12,freq:2960,dur:0.15},
+      {time:0.24,freq:3520,dur:0.18},
+      {time:0.42,freq:4699,dur:0.35},
+    ];
+    melody.forEach(note=>{
+      const osc=audioContext.createOscillator();
+      const gain=audioContext.createGain();
+      osc.type='sine';
+      osc.frequency.setValueAtTime(note.freq,now+note.time);
+      gain.gain.setValueAtTime(0,now+note.time);
+      gain.gain.linearRampToValueAtTime(0.4,now+note.time+0.01);
+      gain.gain.exponentialRampToValueAtTime(0.001,now+note.time+note.dur);
+      osc.connect(gain);
+      gain.connect(audioContext.destination);
+      osc.start(now+note.time);
+      osc.stop(now+note.time+note.dur+0.05);
+    });
+    console.log('🔔🎉 Suara botol masuk diputar');
+  }catch(e){console.warn('Play bottle sound error:',e);}
+}
+
+/**
+ * Suara TRANSAKSI (checkout/pesanan)
+ * Melodi "kasir": 3 nada cepat
+ */
+function playTransactionSound(){
+  if(!soundEnabled)return;
+  try{
+    initAudio();
+    if(!audioContext)return;
+    const now=audioContext.currentTime;
+    const notes=[
+      {time:0.00,freq:1318,dur:0.12},
+      {time:0.14,freq:1760,dur:0.12},
+      {time:0.28,freq:2093,dur:0.30},
+    ];
+    notes.forEach(note=>{
+      const osc=audioContext.createOscillator();
+      const gain=audioContext.createGain();
+      osc.type='triangle';
+      osc.frequency.setValueAtTime(note.freq,now+note.time);
+      gain.gain.setValueAtTime(0,now+note.time);
+      gain.gain.linearRampToValueAtTime(0.35,now+note.time+0.01);
+      gain.gain.exponentialRampToValueAtTime(0.001,now+note.time+note.dur);
+      osc.connect(gain);
+      gain.connect(audioContext.destination);
+      osc.start(now+note.time);
+      osc.stop(now+note.time+note.dur+0.05);
+    });
+    console.log('🔔💳 Suara transaksi diputar');
+  }catch(e){console.warn('Play transaction sound error:',e);}
+}
+
+function showOrderToast(title,sub,type='success'){
+  const t=document.getElementById('order-notif-toast');
+  if(!t)return;
+  document.getElementById('order-toast-title').innerText=title;
+  document.getElementById('order-toast-sub').innerText=sub;
+  t.className='order-notif-toast';
+  if(type==='blue')t.classList.add('blue');
+  if(type==='gold')t.classList.add('gold');
+  void t.offsetWidth;
+  t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'),4000);
+}
+
+function toggleSound(){
+  soundEnabled=!soundEnabled;
+  const icon=document.getElementById('sound-icon');
+  const btn=document.getElementById('sound-toggle-btn');
+  if(soundEnabled){
+    if(icon)icon.className='fas fa-volume-up';
+    if(btn)btn.classList.remove('muted');
+    showNotification('🔔 Suara notifikasi: AKTIF','success');
+    initAudio();
+    playBellSound();
+  } else {
+    if(icon)icon.className='fas fa-volume-mute';
+    if(btn)btn.classList.add('muted');
+    showNotification('🔇 Suara notifikasi: MATI','info');
+  }
+  localStorage.setItem('recoin_sound',soundEnabled?'on':'off');
+}
+
+// Load preferensi suara
+(function(){
+  const saved=localStorage.getItem('recoin_sound');
+  if(saved==='off')soundEnabled=false;
+})();
+
+// Unlock audio saat interaksi pertama
+document.addEventListener('click',initAudio,{once:true});
+document.addEventListener('touchstart',initAudio,{once:true});
+
+// ============================================================
+// NOTIFIKASI BOTOL MASUK
+// ============================================================
+function showBotolNotification(b,a){
+  const n=document.getElementById('botol-notif');
+  const t=document.getElementById('botol-notif-text');
+  if(!n||!t)return;
+  if(a>0)t.innerHTML=`<i class="fas fa-plus-circle"></i> +${a} Botol! Total: ${b} 🌟`;
+  else t.innerHTML=`<i class="fas fa-recycle"></i> Total Botol: ${b}`;
+  n.classList.add('show');
+
+  // 🔊 SUARA botol masuk
+  if(a>0){
+    playBottleSound();
+    showOrderToast('🌱 Botol Masuk!',`+${a} botol • Total: ${b} botol`,'success');
+  } else {
+    playBellSound();
+  }
+
+  setTimeout(()=>n.classList.remove('show'),2500);
+  const be=document.getElementById('count');
+  if(be){be.classList.add('increase');setTimeout(()=>be.classList.remove('increase'),500)}
+}
 
 function hitungEmisiTerselamatkan(j){const g=j*EMISI_PER_BOTOL;const kg=g/1000;return{gram:g,kg,setaraPohon:parseFloat((kg/20).toFixed(1)),setaraListrik:parseFloat((kg/.5).toFixed(1))}}
 
@@ -509,7 +695,7 @@ function showManualAddressInput(){const m=document.getElementById('manual-addres
 function submitManualAddress(){const a=document.getElementById('manual-address').value.trim();if(!a||a.length<10){showNotification('Masukkan alamat lengkap!','error');return}manualAddress=a;const da=document.getElementById('delivery-address');const di=document.getElementById('delivery-info');const mi=document.getElementById('manual-address-input');if(da)da.innerHTML=`<strong>${a}</strong>`;if(di)di.classList.remove('hidden');if(mi)mi.classList.add('hidden');updateCartDisplay();showNotification('✅ Alamat disimpan','success')}
 
 // ============================================================
-// FUNGSI AUTH (FIREBASE AUTH COMPAT)
+// FUNGSI AUTH
 // ============================================================
 function saveUserSession(){if(!currentUser.phone||!currentUser.rememberMe)return;localStorage.setItem('recoin_user_session',JSON.stringify({phone:currentUser.phone,email:currentUser.email,expiresAt:Date.now()+SESSION_DURATION}));}
 function clearUserSession(){localStorage.removeItem('recoin_user_session');}
@@ -521,7 +707,6 @@ async function checkAutoLogin(){
                 currentUser.phone = user.uid;
                 currentUser.email = user.email;
                 currentUser.rememberMe = true;
-
                 const snapshot = await db.ref('/accounts/' + user.uid).once('value');
                 if (snapshot.exists()) {
                     currentUser.botol = snapshot.val().botol || 0;
@@ -618,6 +803,14 @@ function completeLogin(){
     startProductListener();
     startSaldoListener();
     startBroadcastListener();
+    // Update icon suara sesuai preferensi
+    const saved=localStorage.getItem('recoin_sound');
+    if(saved==='off'){
+      const icon=document.getElementById('sound-icon');
+      const btn=document.getElementById('sound-toggle-btn');
+      if(icon)icon.className='fas fa-volume-mute';
+      if(btn)btn.classList.add('muted');
+    }
 }
 
 function refreshSaldo(){db.ref('/accounts/'+currentUser.phone+'/botol').once('value').then(s=>{const n=s.val()||0;currentUser.botol=n;const c=document.getElementById('count');const r=document.getElementById('rupiah');const ms=document.getElementById('modal-saldo');if(c)c.innerText=n;if(r)r.innerText=formatRupiah(n*HARGA_PER_BOTOL);if(ms)ms.innerText=formatRupiah(n*HARGA_PER_BOTOL);updateEcoDisplay()})}
@@ -699,9 +892,52 @@ function scrollToCartPanel(){const cp=document.getElementById('cart-panel');if(c
 function toggleCartAndScroll(){const cp=document.getElementById('cart-panel');if(cp.classList.contains('hidden')){toggleCart();setTimeout(()=>scrollToCartPanel(),150)}else scrollToCartPanel()}
 
 // ============================================================
-// CHECKOUT (MANUAL ADDRESS)
+// CHECKOUT + SUARA TRANSAKSI
 // ============================================================
-async function checkout(){if(!navigator.onLine){showNotification('Tidak ada koneksi internet!','error');return}await refreshSaldoPromise();const sub=cart.reduce((s,i)=>s+i.price*i.quantity,0);if(sub>currentUser.botol*HARGA_PER_BOTOL){showNotification('Saldo tidak cukup!','error');return}if(cart.length===0){showNotification('Keranjang belanja kosong!','error');return}if(deliveryEnabled&&!manualAddress){showNotification('Harap isi alamat pengiriman!','error');return}showNotification('Memproses pesanan...','info');const tid='TRX'+Date.now();let dd=null;if(deliveryEnabled&&manualAddress){dd={type:'manual',address:manualAddress}}const tr={id:tid,user_id:currentUser.phone,user_name:currentUser.email||currentUser.phone,items:cart.map(i=>({id:i.id,name:i.name,quantity:i.quantity,price:i.price,merchant_id:i.merchant_id,merchant_name:i.merchant_name})),subtotal:sub,total:sub,timestamp:Date.now(),status:'diproses'};if(dd)tr.delivery=dd;const u={};u[`/accounts/${currentUser.phone}/botol`]=currentUser.botol-Math.ceil(sub/HARGA_PER_BOTOL);u[`/transactions/${currentUser.phone}/${tid}`]=tr;cart.forEach(i=>{u[`/products/${i.id}/stock`]=firebase.database.ServerValue.increment(-i.quantity)});const mom={};cart.forEach(item=>{const mid=item.merchant_id;if(!mom[mid])mom[mid]={items:[],user_id:currentUser.phone,user_phone:currentUser.email||currentUser.phone,timestamp:Date.now(),status:'diproses',delivery:dd,merchant_name:item.merchant_name};mom[mid].items.push({id:item.id,name:item.name,quantity:item.quantity,price:item.price,merchant_id:mid,merchant_name:item.merchant_name})});for(const[mid,od]of Object.entries(mom)){u[`/merchant_orders/${mid}/${tid}`]={id:tid,user_id:currentUser.phone,user_phone:currentUser.email||currentUser.phone,items:od.items,subtotal:od.items.reduce((s,i)=>s+i.price*i.quantity,0),delivery:dd,timestamp:od.timestamp,status:od.status,delivery_cost:0}}try{await db.ref().update(u);showNotification('✅ Pesanan berhasil dibuat!','success');cart=[];deliveryEnabled=false;manualAddress="";const dc=document.getElementById('delivery-checkbox');const dobj=document.getElementById('delivery-options');const cp=document.getElementById('cart-panel');if(dc)dc.checked=false;if(dobj)dobj.classList.add('hidden');if(cp)cp.classList.add('hidden');updateCartDisplay();refreshSaldo();loadProductsOnce()}catch(e){showNotification('Error: '+e.message,'error')}}
+async function checkout(){
+  if(!navigator.onLine){showNotification('Tidak ada koneksi internet!','error');return}
+  await refreshSaldoPromise();
+  const sub=cart.reduce((s,i)=>s+i.price*i.quantity,0);
+  if(sub>currentUser.botol*HARGA_PER_BOTOL){showNotification('Saldo tidak cukup!','error');return}
+  if(cart.length===0){showNotification('Keranjang belanja kosong!','error');return}
+  if(deliveryEnabled&&!manualAddress){showNotification('Harap isi alamat pengiriman!','error');return}
+  showNotification('Memproses pesanan...','info');
+  const tid='TRX'+Date.now();
+  let dd=null;
+  if(deliveryEnabled&&manualAddress){dd={type:'manual',address:manualAddress}}
+  const tr={id:tid,user_id:currentUser.phone,user_name:currentUser.email||currentUser.phone,items:cart.map(i=>({id:i.id,name:i.name,quantity:i.quantity,price:i.price,merchant_id:i.merchant_id,merchant_name:i.merchant_name})),subtotal:sub,total:sub,timestamp:Date.now(),status:'diproses'};
+  if(dd)tr.delivery=dd;
+  const u={};
+  u[`/accounts/${currentUser.phone}/botol`]=currentUser.botol-Math.ceil(sub/HARGA_PER_BOTOL);
+  u[`/transactions/${currentUser.phone}/${tid}`]=tr;
+  cart.forEach(i=>{u[`/products/${i.id}/stock`]=firebase.database.ServerValue.increment(-i.quantity)});
+  const mom={};
+  cart.forEach(item=>{const mid=item.merchant_id;if(!mom[mid])mom[mid]={items:[],user_id:currentUser.phone,user_phone:currentUser.email||currentUser.phone,timestamp:Date.now(),status:'diproses',delivery:dd,merchant_name:item.merchant_name};mom[mid].items.push({id:item.id,name:item.name,quantity:item.quantity,price:item.price,merchant_id:mid,merchant_name:item.merchant_name})});
+  for(const[mid,od]of Object.entries(mom)){u[`/merchant_orders/${mid}/${tid}`]={id:tid,user_id:currentUser.phone,user_phone:currentUser.email||currentUser.phone,items:od.items,subtotal:od.items.reduce((s,i)=>s+i.price*i.quantity,0),delivery:dd,timestamp:od.timestamp,status:od.status,delivery_cost:0}}
+  try{
+    await db.ref().update(u);
+
+    // 🔊 SUARA TRANSAKSI
+    playTransactionSound();
+    showOrderToast('💳 Transaksi Berhasil!',`Pesanan ${formatRupiah(sub)} telah dibuat`,'blue');
+
+    showNotification('✅ Pesanan berhasil dibuat!','success');
+    cart=[];
+    deliveryEnabled=false;
+    manualAddress="";
+    const dc=document.getElementById('delivery-checkbox');
+    const dobj=document.getElementById('delivery-options');
+    const cp=document.getElementById('cart-panel');
+    if(dc)dc.checked=false;
+    if(dobj)dobj.classList.add('hidden');
+    if(cp)cp.classList.add('hidden');
+    updateCartDisplay();
+    refreshSaldo();
+    loadProductsOnce();
+  }catch(e){
+    showNotification('Error: '+e.message,'error');
+  }
+}
 
 // ============================================================
 // ORDER DISPLAY
@@ -710,7 +946,32 @@ function displayRecentOrders(){const ro=document.getElementById('recent-orders')
 
 function displayAllOrders(){const ol=document.getElementById('orders-list-full');if(!ol)return;let h='';if(userOrders.length===0)h='<div class="empty-state"><i class="fas fa-shopping-bag"></i><p>Belum ada pesanan</p></div>';else userOrders.forEach(o=>{const sc=o.status==='diproses'?'status-diproses':o.status==='dikirim'?'status-dikirim':o.status==='selesai'?'status-selesai':'status-batal';const cc=o.status==='dikirim';h+=`<div class="order-card"><div style="display:flex;justify-content:space-between;margin-bottom:8px"><strong>#${o.id.slice(-8)}</strong><span class="order-status ${sc}">${o.status||'diproses'}</span></div><div style="font-size:13px;margin-bottom:8px;color:var(--text2)">${formatDate(o.timestamp)}</div><div style="margin-bottom:8px">${o.items?.map(i=>`${i.name} x${i.quantity}`).join(', ')||'Tidak ada item'}</div><div style="display:flex;justify-content:space-between;font-weight:700"><span>Total</span><span style="color:var(--primary)">${formatRupiah(o.total||0)}</span></div>`;if(o.delivery)h+=`<div style="margin-top:8px;font-size:12px;color:var(--primary)"><i class="fas fa-map-marker-alt"></i> ${o.delivery.address||`${o.delivery.lat}, ${o.delivery.lng}`}</div>`;if(cc)h+=`<button class="btn-konfirmasi" onclick="confirmOrderReceived('${o.id}')"><i class="fas fa-check-circle"></i> KONFIRMASI PESANAN DITERIMA</button>`;else if(o.status==='selesai')h+=`<div class="selesai-badge"><i class="fas fa-check-circle"></i> Pesanan Selesai - Terima Kasih!</div>`;h+=`</div>`});ol.innerHTML=h}
 
-async function confirmOrderReceived(oid){const o=userOrders.find(x=>x.id===oid);if(!o){showNotification('Order tidak ditemukan!','error');return}if(o.status!=='dikirim'){showNotification('Pesanan belum dikirim!','error');return}showNotification('Memproses konfirmasi...','info');const u={};u[`/transactions/${currentUser.phone}/${oid}/status`]='selesai';u[`/transactions/${currentUser.phone}/${oid}/confirmed_at`]=Date.now();o.items.forEach(item=>{const mid=item.merchant_id;const it=item.price*item.quantity;u[`/merchants/${mid}/saldo`]=firebase.database.ServerValue.increment(it);u[`/merchant_orders/${mid}/${oid}/status`]='selesai';u[`/merchant_orders/${mid}/${oid}/confirmed_at`]=Date.now()});u[`/confirmations/${oid}`]={user_id:currentUser.phone,order_id:oid,timestamp:Date.now(),items:o.items,total:o.total};try{await db.ref().update(u);showNotification('✅ Pesanan dikonfirmasi!','success');o.status='selesai'}catch(e){showNotification('Gagal konfirmasi: '+e.message,'error')}}
+// ============================================================
+// KONFIRMASI PESANAN + SUARA
+// ============================================================
+async function confirmOrderReceived(oid){
+  const o=userOrders.find(x=>x.id===oid);
+  if(!o){showNotification('Order tidak ditemukan!','error');return}
+  if(o.status!=='dikirim'){showNotification('Pesanan belum dikirim!','error');return}
+  showNotification('Memproses konfirmasi...','info');
+  const u={};
+  u[`/transactions/${currentUser.phone}/${oid}/status`]='selesai';
+  u[`/transactions/${currentUser.phone}/${oid}/confirmed_at`]=Date.now();
+  o.items.forEach(item=>{const mid=item.merchant_id;const it=item.price*item.quantity;u[`/merchants/${mid}/saldo`]=firebase.database.ServerValue.increment(it);u[`/merchant_orders/${mid}/${oid}/status`]='selesai';u[`/merchant_orders/${mid}/${oid}/confirmed_at`]=Date.now()});
+  u[`/confirmations/${oid}`]={user_id:currentUser.phone,order_id:oid,timestamp:Date.now(),items:o.items,total:o.total};
+  try{
+    await db.ref().update(u);
+
+    // 🔊 SUARA saat konfirmasi pesanan
+    playBellSound();
+    showOrderToast('✅ Pesanan Selesai!','Konfirmasi berhasil, terima kasih!','gold');
+
+    showNotification('✅ Pesanan dikonfirmasi!','success');
+    o.status='selesai';
+  }catch(e){
+    showNotification('Gagal konfirmasi: '+e.message,'error');
+  }
+}
 
 function showOrderDetail(oid){const o=userOrders.find(x=>x.id===oid);if(!o)return;const sc=o.status==='diproses'?'status-diproses':o.status==='dikirim'?'status-dikirim':o.status==='selesai'?'status-selesai':'status-batal';const cc=o.status==='dikirim';const ic=o.status==='selesai';const tl=`<div class="status-timeline"><div class="timeline-point ${o.status!=='batal'?'completed':''}"><div class="timeline-icon"><i class="fas fa-check"></i></div><div class="timeline-label">Diproses</div></div><div class="timeline-point ${o.status==='dikirim'||o.status==='selesai'?'completed':''}"><div class="timeline-icon"><i class="fas fa-truck"></i></div><div class="timeline-label">Dikirim</div></div><div class="timeline-point ${o.status==='selesai'?'completed':''}"><div class="timeline-icon"><i class="fas fa-check-circle"></i></div><div class="timeline-label">Selesai</div></div></div>`;let ih='<div class="order-items-list">';o.items.forEach(i=>{ih+=`<div class="order-item-detail"><span class="order-item-name">${escapeHtml(i.name)}</span><span class="order-item-qty">${i.quantity}x</span><span class="order-item-price">${formatRupiah(i.price*i.quantity)}</span></div>`});ih+='</div>';let dh='';if(o.delivery)dh=`<div class="order-detail-row"><span class="order-detail-label">Alamat Kirim</span><span class="order-detail-value">${o.delivery.address||`${o.delivery.lat}, ${o.delivery.lng}`}</span></div>`;let h=`${tl}<div class="order-detail-card"><div class="order-detail-row"><span class="order-detail-label">No. Order</span><span class="order-detail-value">#${o.id.slice(-8)}</span></div><div class="order-detail-row"><span class="order-detail-label">Tanggal</span><span class="order-detail-value">${formatDate(o.timestamp)}</span></div><div class="order-detail-row"><span class="order-detail-label">Status</span><span class="order-detail-value"><span class="order-status ${sc}">${o.status}</span></span></div><div class="order-detail-row"><span class="order-detail-label">Merchant</span><span class="order-detail-value">${o.items[0]?.merchant_name||'-'}</span></div>${dh}</div><div class="order-detail-card"><h4 style="margin-bottom:15px">Detail Produk</h4>${ih}<div class="order-detail-row" style="margin-top:15px;border-top:2px solid var(--border);padding-top:15px"><span class="order-detail-label"><strong>Total</strong></span><span class="order-detail-value" style="font-size:18px;color:var(--primary)"><strong>${formatRupiah(o.total)}</strong></span></div></div>`;if(cc)h+=`<button class="btn-konfirmasi" onclick="confirmOrderReceived('${o.id}')"><i class="fas fa-check-circle"></i> KONFIRMASI PESANAN DITERIMA</button>`;else if(ic)h+=`<div class="selesai-badge" style="margin-top:20px"><i class="fas fa-check-circle"></i> Pesanan Selesai - Terima Kasih!</div>`;const odc=document.getElementById('order-detail-content');if(odc)odc.innerHTML=h;const op=document.getElementById('orders-page');const odp=document.getElementById('order-detail-page');if(op)op.classList.add('hidden');if(odp)odp.classList.remove('hidden')}
 
@@ -842,6 +1103,16 @@ window.onload=function(){
   beforeInstallPrompt();
   initOfflineDetection();
   updateFloatingCartVisibility();
+
+  // Set icon suara sesuai preferensi tersimpan
+  const saved=localStorage.getItem('recoin_sound');
+  if(saved==='off'){
+    const icon=document.getElementById('sound-icon');
+    const btn=document.getElementById('sound-toggle-btn');
+    if(icon)icon.className='fas fa-volume-mute';
+    if(btn)btn.classList.add('muted');
+  }
+
   console.log('🔥 RE-COIN siap! Harga per botol: Rp '+HARGA_PER_BOTOL);
 };
 </script>
